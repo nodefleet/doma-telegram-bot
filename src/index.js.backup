@@ -1,0 +1,231 @@
+const TelegramBot = require('node-telegram-bot-api');
+const config = require('./config/config');
+const logger = require('./utils/logger');
+const DomainScoringService = require('./services/domainScoringService');
+const DomainValidator = require('./utils/domainValidator');
+const ResponseFormatter = require('./utils/responseFormatter');
+
+class DomaTelegramBot {
+  constructor() {
+    this.bot = new TelegramBot(config.telegram.token, { polling: true });
+    this.scoringService = new DomainScoringService();
+    this.setupHandlers();
+    logger.info('Doma Telegram Bot started successfully');
+  }
+
+  setupHandlers() {
+    // Start command
+    this.bot.onText(/\/start/, (msg) => {
+      const chatId = msg.chat.id;
+      const welcomeMessage = `🤖 Welcome to Doma Domain Scoring Bot!\n\n` +
+        `I can analyze any domain and provide a comprehensive score based on multiple factors including blockchain activity, popularity, and market trends.\n\n` +
+        `Type /help to see available commands.`;
+      
+      this.bot.sendMessage(chatId, welcomeMessage);
+    });
+
+    // Help command
+    this.bot.onText(/\/help/, (msg) => {
+      const chatId = msg.chat.id;
+      this.bot.sendMessage(chatId, ResponseFormatter.formatHelp(), { parse_mode: 'Markdown' });
+    });
+
+    // About command
+    this.bot.onText(/\/about/, (msg) => {
+      const chatId = msg.chat.id;
+      this.bot.sendMessage(chatId, ResponseFormatter.formatAbout(), { parse_mode: 'Markdown' });
+    });
+
+    // Score command
+    this.bot.onText(/\/score (.+)/, async (msg, match) => {
+      const chatId = msg.chat.id;
+      const input = match[1].trim();
+      
+      try {
+        // Send loading message
+        const loadingMsg = await this.bot.sendMessage(chatId, ResponseFormatter.formatLoading(input));
+        
+        // Extract and validate domains
+        const domains = this.extractDomains(input);
+        
+        if (domains.length === 0) {
+          await this.bot.editMessageText(
+            ResponseFormatter.formatError('No valid domains found. Please provide a valid domain name.'),
+            { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'Markdown' }
+          );
+          return;
+        }
+
+        if (domains.length > config.bot.maxDomainsPerRequest) {
+          await this.bot.editMessageText(
+            ResponseFormatter.formatError(`Too many domains. Maximum ${config.bot.maxDomainsPerRequest} domains per request.`),
+            { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'Markdown' }
+          );
+          return;
+        }
+
+        // Process domains
+        if (domains.length === 1) {
+          await this.processSingleDomain(chatId, loadingMsg.message_id, domains[0]);
+        } else {
+          await this.processMultipleDomains(chatId, loadingMsg.message_id, domains);
+        }
+
+      } catch (error) {
+        logger.error('Error processing score command:', error);
+        await this.bot.sendMessage(chatId, ResponseFormatter.formatError('An unexpected error occurred. Please try again.'));
+      }
+    });
+
+    // Handle any other text messages
+    this.bot.on('message', (msg) => {
+      const chatId = msg.chat.id;
+      const text = msg.text;
+
+      // If it's not a command, treat it as a domain
+      if (text && !text.startsWith('/')) {
+        this.bot.sendMessage(chatId, `To analyze a domain, use: /score ${text}`);
+      }
+    });
+
+    // Error handling
+    this.bot.on('polling_error', (error) => {
+      logger.error('Polling error:', error);
+    });
+
+    this.bot.on('error', (error) => {
+      logger.error('Bot error:', error);
+    });
+  }
+
+  /**
+   * Extract domains from user input
+   * @param {string} input - User input
+   * @returns {Array} Array of valid domains
+   */
+  extractDomains(input) {
+    const domains = [];
+    
+    // Split by common separators
+    const parts = input.split(/[,\s\n]+/).filter(part => part.trim());
+    
+    parts.forEach(part => {
+      const domain = DomainValidator.extractDomain(part);
+      if (domain && !domains.includes(domain)) {
+        domains.push(domain);
+      }
+    });
+    
+    return domains;
+  }
+
+  /**
+   * Process single domain
+   * @param {number} chatId - Chat ID
+   * @param {number} messageId - Message ID to edit
+   * @param {string} domain - Domain to analyze
+   */
+  async processSingleDomain(chatId, messageId, domain) {
+    try {
+      const scoreData = await this.scoringService.calculateDomainScore(domain);
+      const response = ResponseFormatter.formatDomainScore(scoreData);
+      
+      await this.bot.editMessageText(response, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'Markdown'
+      });
+      
+      logger.info(`Successfully processed domain: ${domain}`);
+    } catch (error) {
+      logger.error(`Error processing domain ${domain}:`, error);
+      await this.bot.editMessageText(
+        ResponseFormatter.formatError(`Failed to analyze domain: ${error.message}`),
+        { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' }
+      );
+    }
+  }
+
+  /**
+   * Process multiple domains
+   * @param {number} chatId - Chat ID
+   * @param {number} messageId - Message ID to edit
+   * @param {Array} domains - Domains to analyze
+   */
+  async processMultipleDomains(chatId, messageId, domains) {
+    try {
+      
+      // Process domains in parallel
+      const promises = domains.map(async (domain) => {
+        try {
+          const scoreData = await this.scoringService.calculateDomainScore(domain);
+          return {
+            domain,
+            overallScore: scoreData.overallScore
+          };
+        } catch (error) {
+          logger.error(`Error processing domain ${domain}:`, error);
+          return {
+            domain,
+            overallScore: 0,
+            error: error.message
+          };
+        }
+      });
+      
+      const results = await Promise.all(promises);
+      const response = ResponseFormatter.formatMultipleDomains(results);
+      
+      await this.bot.editMessageText(response, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'Markdown'
+      });
+      
+      logger.info(`Successfully processed ${domains.length} domains`);
+    } catch (error) {
+      logger.error('Error processing multiple domains:', error);
+      await this.bot.editMessageText(
+        ResponseFormatter.formatError('Failed to analyze domains. Please try again.'),
+        { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' }
+      );
+    }
+  }
+
+  /**
+   * Start the bot
+   */
+  start() {
+    logger.info('Starting Doma Telegram Bot...');
+    this.bot.startPolling();
+  }
+
+  /**
+   * Stop the bot
+   */
+  stop() {
+    logger.info('Stopping Doma Telegram Bot...');
+    this.bot.stopPolling();
+  }
+}
+
+// Create and start the bot
+const bot = new DomaTelegramBot();
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  logger.info('Received SIGINT, shutting down gracefully...');
+  bot.stop();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  logger.info('Received SIGTERM, shutting down gracefully...');
+  bot.stop();
+  process.exit(0);
+});
+
+// Start the bot
+bot.start();
+
+module.exports = DomaTelegramBot;

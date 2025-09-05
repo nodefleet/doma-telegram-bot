@@ -4,12 +4,12 @@ A Telegram bot that provides comprehensive domain scoring using the Doma infrast
 
 ## Features
 
-- 🎯 **Comprehensive Domain Scoring** - Analyzes domains across 9 different traits
-- ⛓️ **Blockchain Integration** - Uses Doma API for on-chain domain data
-- 🌐 **Web3 Domain Support** - Specialized analysis for crypto domains
-- 📊 **Detailed Breakdown** - Shows individual trait scores and weights
-- 🔄 **Real-time Analysis** - Fresh data with caching for performance
-- 📱 **User-friendly Interface** - Clean Telegram interface with emojis and formatting
+- **Comprehensive Domain Scoring** - Analyzes domains across 9 different traits
+- **Blockchain Integration** - Uses Doma API for on-chain domain data
+- **Web3 Domain Support** - Specialized analysis for crypto domains
+- **Detailed Breakdown** - Shows individual trait scores and weights
+- **Real-time Analysis** - Fresh data with caching for performance
+- **User-friendly Interface** - Clean Telegram interface with emojis and formatting
 
 ## Domain Scoring Traits
 
