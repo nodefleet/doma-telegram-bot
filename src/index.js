@@ -6,6 +6,7 @@ const SubscriptionService = require('./services/SubscriptionService');
 const DomainValidator = require('./utils/domainValidator');
 const ResponseFormatter = require('./utils/responseFormatter');
 const SubscriptionFormatter = require('./utils/SubscriptionFormatter');
+const PeriodicReportFormatter = require('./utils/PeriodicReportFormatter');
 
 class DomaTelegramBot {
   constructor() {
@@ -170,7 +171,8 @@ class DomaTelegramBot {
         const message = `📊 **Bot Statistics**\n\n` +
           `• Total Users: ${stats.totalUsers}\n` +
           `• Total Domains: ${stats.totalDomains}\n` +
-          `• Monitoring: ${stats.isMonitoring ? '✅ Active' : '❌ Inactive'}\n\n` +
+          `• Monitoring: ${stats.isMonitoring ? '✅ Active' : '❌ Inactive'}\n` +
+          `• Active Report Timers: ${stats.activeReportTimers}\n\n` +
           `_Last updated: ${new Date().toLocaleString()}_`;
         
         await this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
@@ -178,6 +180,56 @@ class DomaTelegramBot {
         logger.error('Error processing stats command:', error);
         await this.bot.sendMessage(chatId, '❌ Error retrieving statistics.');
       }
+    });
+
+    // Set report interval command
+    this.bot.onText(/\/set_interval (.+)/, async (msg, match) => {
+      const chatId = msg.chat.id;
+      const userId = msg.from.id;
+      const interval = match[1].trim().toLowerCase();
+      
+      try {
+        const result = this.subscriptionService.setReportInterval(userId, interval);
+        
+        if (result.success) {
+          const userSub = this.subscriptionService.getUserSubscriptions(userId);
+          const message = PeriodicReportFormatter.formatReportSettings(interval, userSub.preferences.periodicReports);
+          await this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+        } else {
+          await this.bot.sendMessage(chatId, PeriodicReportFormatter.formatError(result.message), { parse_mode: 'Markdown' });
+        }
+      } catch (error) {
+        logger.error('Error processing set_interval command:', error);
+        await this.bot.sendMessage(chatId, '❌ Error setting report interval.');
+      }
+    });
+
+    // Toggle reports command
+    this.bot.onText(/\/reports (on|off)/, async (msg, match) => {
+      const chatId = msg.chat.id;
+      const userId = msg.from.id;
+      const enabled = match[1] === 'on';
+      
+      try {
+        const result = this.subscriptionService.togglePeriodicReports(userId, enabled);
+        
+        if (result.success) {
+          const userSub = this.subscriptionService.getUserSubscriptions(userId);
+          const message = PeriodicReportFormatter.formatReportSettings(userSub.preferences.reportInterval, enabled);
+          await this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+        } else {
+          await this.bot.sendMessage(chatId, PeriodicReportFormatter.formatError(result.message), { parse_mode: 'Markdown' });
+        }
+      } catch (error) {
+        logger.error('Error processing reports command:', error);
+        await this.bot.sendMessage(chatId, '❌ Error toggling reports.');
+      }
+    });
+
+    // Report intervals help command
+    this.bot.onText(/\/report_help/, (msg) => {
+      const chatId = msg.chat.id;
+      this.bot.sendMessage(chatId, PeriodicReportFormatter.formatReportIntervals(), { parse_mode: 'Markdown' });
     });
 
     // Handle any other text messages

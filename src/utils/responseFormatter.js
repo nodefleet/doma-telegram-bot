@@ -46,25 +46,31 @@ class ResponseFormatter {
   static formatHelp() {
     return `🤖 *Doma Domain Scoring Bot*\n\n` +
            `*Commands:*\n` +
-           `/score <domain> - Get domain score
-/subscribe <domain> - Track domain for events
-/unsubscribe <domain> - Stop tracking domain
-/my_subscriptions - View your subscriptions
-/alerts - Configure alert preferences\n` +
-           `/help - Show this help message\n` +
-           `/about - About the bot\n\n` +
+           `• /score <domain> - Get domain score\n` +
+           `• /subscribe <domain> - Track domain for events\n` +
+           `• /unsubscribe <domain> - Stop tracking domain\n` +
+           `• /my_subscriptions - View your subscriptions\n` +
+           `• /alerts - Configure alert preferences\n` +
+           `• /set_interval <time> - Set report frequency\n` +
+           `• /reports <on|off> - Toggle periodic reports\n` +
+           `• /report_help - Report interval options\n` +
+           `• /help - Show this help message\n` +
+           `• /about - About the bot\n\n` +
            `*Examples:*\n` +
            `• /score example.com\n` +
            `• /score crypto.eth\n` +
-           `• /score nft.xyz\n\n` +
+           `• /score nft.xyz\n` +
+           `• /set_interval 30min\n` +
+           `• /reports on\n\n` +
            `*Features:*\n` +
            `• Comprehensive domain scoring\n` +
            `• Web3 domain analysis\n` +
            `• Blockchain activity tracking\n` +
-           `• Market trend analysis
-• Real-time domain event alerts
-• Subscription management
-• Customizable notifications`;
+           `• Market trend analysis\n` +
+           `• Real-time domain event alerts\n` +
+           `• Periodic status reports\n` +
+           `• Subscription management\n` +
+           `• Customizable notifications`;
   }
 
   /**

@@ -8,6 +8,16 @@ class SubscriptionService {
     this.domaService = new DomaService();
     this.eventCheckInterval = 30000; // Check for events every 30 seconds
     this.isMonitoring = false;
+    
+    // Periodic report intervals (in milliseconds)
+    this.reportIntervals = {
+      '10min': 10 * 60 * 1000,      // 10 minutes
+      '30min': 30 * 60 * 1000,      // 30 minutes
+      '12h': 12 * 60 * 60 * 1000,   // 12 hours
+      '1day': 24 * 60 * 60 * 1000   // 1 day
+    };
+    
+    this.reportTimers = new Map(); // userId -> timer reference
   }
 
   /**
@@ -27,7 +37,9 @@ class SubscriptionService {
             expirationAlerts: true,
             saleAlerts: true,
             transferAlerts: true,
-            scoreThreshold: 50
+            scoreThreshold: 50,
+            reportInterval: '30min', // Default to 30 minutes
+            periodicReports: true
           }
         });
       }
@@ -50,6 +62,9 @@ class SubscriptionService {
       if (!this.isMonitoring) {
         this.startEventMonitoring();
       }
+
+      // Start periodic reports for this user
+      this.startPeriodicReports(userId);
 
       logger.info(`User ${userId} subscribed to domain ${domain}`);
       return { success: true, message: `Successfully subscribed to ${domain}` };
@@ -289,13 +304,183 @@ class SubscriptionService {
   }
 
   /**
+   * Set periodic report interval for user
+   * @param {number} userId - Telegram user ID
+   * @param {string} interval - Report interval ('10min', '30min', '12h', '1day')
+   */
+  setReportInterval(userId, interval) {
+    if (!this.reportIntervals[interval]) {
+      return { success: false, message: 'Invalid report interval. Use: 10min, 30min, 12h, 1day' };
+    }
+
+    if (!this.subscriptions.has(userId)) {
+      return { success: false, message: 'No active subscriptions found' };
+    }
+
+    const userSub = this.subscriptions.get(userId);
+    userSub.preferences.reportInterval = interval;
+
+    // Restart periodic reports with new interval
+    this.startPeriodicReports(userId);
+
+    logger.info(`Set report interval for user ${userId} to ${interval}`);
+    return { success: true, message: `Report interval set to ${interval}` };
+  }
+
+  /**
+   * Start periodic reports for user
+   * @param {number} userId - Telegram user ID
+   */
+  startPeriodicReports(userId) {
+    // Clear existing timer if any
+    this.stopPeriodicReports(userId);
+
+    if (!this.subscriptions.has(userId)) return;
+
+    const userSub = this.subscriptions.get(userId);
+    const interval = userSub.preferences.reportInterval || '30min';
+    const intervalMs = this.reportIntervals[interval];
+
+    if (!userSub.preferences.periodicReports) return;
+
+    const timer = setInterval(async () => {
+      await this.sendPeriodicReport(userId);
+    }, intervalMs);
+
+    this.reportTimers.set(userId, timer);
+    logger.info(`Started periodic reports for user ${userId} (${interval})`);
+  }
+
+  /**
+   * Stop periodic reports for user
+   * @param {number} userId - Telegram user ID
+   */
+  stopPeriodicReports(userId) {
+    if (this.reportTimers.has(userId)) {
+      clearInterval(this.reportTimers.get(userId));
+      this.reportTimers.delete(userId);
+      logger.info(`Stopped periodic reports for user ${userId}`);
+    }
+  }
+
+  /**
+   * Send periodic status report to user
+   * @param {number} userId - Telegram user ID
+   */
+  async sendPeriodicReport(userId) {
+    try {
+      if (!this.subscriptions.has(userId)) return;
+
+      const userSub = this.subscriptions.get(userId);
+      const domains = Array.from(userSub.domains);
+
+      if (domains.length === 0) return;
+
+      // Generate status report for all subscribed domains
+      const report = await this.generateStatusReport(domains);
+      
+      // This will be implemented in the main bot file
+      // For now, just log the report
+      logger.info(`Periodic report for user ${userId}:`, report);
+      
+    } catch (error) {
+      logger.error(`Error sending periodic report to user ${userId}:`, error);
+    }
+  }
+
+  /**
+   * Generate comprehensive status report for domains
+   * @param {Array} domains - List of domains to report on
+   */
+  async generateStatusReport(domains) {
+    const report = {
+      timestamp: new Date().toISOString(),
+      domains: []
+    };
+
+    for (const domain of domains) {
+      try {
+        // Get current domain data
+        const domainData = await this.domaService.getDomainData(domain);
+        const activities = await this.domaService.getDomainActivities(domain);
+        const listings = await this.domaService.getDomainListings(domain);
+        const offers = await this.domaService.getDomainOffers(domain);
+
+        // Calculate current score (simplified)
+        const score = this.calculateQuickScore(domain, domainData, activities, listings, offers);
+
+        report.domains.push({
+          domain,
+          score,
+          status: domainData ? 'Active' : 'Inactive',
+          activities: activities?.length || 0,
+          listings: listings?.length || 0,
+          offers: offers?.length || 0,
+          lastActivity: activities?.[0]?.timestamp || 'None',
+          currentPrice: listings?.[0]?.priceInUSD || 'N/A'
+        });
+
+      } catch (error) {
+        logger.error(`Error generating report for domain ${domain}:`, error);
+        report.domains.push({
+          domain,
+          score: 0,
+          status: 'Error',
+          error: error.message
+        });
+      }
+    }
+
+    return report;
+  }
+
+  /**
+   * Calculate quick score for status report
+   */
+  calculateQuickScore(domain, domainData, activities, listings, offers) {
+    let score = 0;
+    
+    // Basic scoring factors
+    if (domainData) score += 30;
+    if (activities?.length > 0) score += Math.min(30, activities.length * 5);
+    if (listings?.length > 0) score += 20;
+    if (offers?.length > 0) score += 20;
+    
+    return Math.min(100, score);
+  }
+
+  /**
+   * Toggle periodic reports for user
+   * @param {number} userId - Telegram user ID
+   * @param {boolean} enabled - Enable or disable reports
+   */
+  togglePeriodicReports(userId, enabled) {
+    if (!this.subscriptions.has(userId)) {
+      return { success: false, message: 'No active subscriptions found' };
+    }
+
+    const userSub = this.subscriptions.get(userId);
+    userSub.preferences.periodicReports = enabled;
+
+    if (enabled) {
+      this.startPeriodicReports(userId);
+    } else {
+      this.stopPeriodicReports(userId);
+    }
+
+    logger.info(`Periodic reports ${enabled ? 'enabled' : 'disabled'} for user ${userId}`);
+    return { success: true, message: `Periodic reports ${enabled ? 'enabled' : 'disabled'}` };
+  }
+
+  /**
    * Get subscription statistics
    */
   getStats() {
     return {
       totalUsers: this.subscriptions.size,
       totalDomains: this.domainWatchers.size,
-      isMonitoring: this.isMonitoring
+      isMonitoring: this.isMonitoring,
+      activeReportTimers: this.reportTimers.size
     };
   }
 }

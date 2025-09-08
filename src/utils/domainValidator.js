@@ -43,6 +43,16 @@ class DomainValidator {
   }
 
   /**
+   * Check if domain is valid (simple boolean check)
+   * @param {string} domain - Domain to validate
+   * @returns {boolean} True if valid
+   */
+  static isValidDomain(domain) {
+    const result = this.validateDomain(domain);
+    return result.valid;
+  }
+
+  /**
    * Extract domain from various input formats
    * @param {string} input - User input
    * @returns {string|null} Extracted domain or null
