@@ -3,10 +3,18 @@ class SubscriptionFormatter {
    * Format subscription success message
    * @param {string} domain - Domain name
    * @param {Object} preferences - User preferences
+   * @param {number} currentScore - Current domain score (optional)
    */
-  static formatSubscriptionSuccess(domain, preferences) {
+  static formatSubscriptionSuccess(domain, preferences, currentScore = null) {
     let message = `✅ **Successfully subscribed to \`${domain}\`**\n\n`;
-    message += `🔔 **Alert Settings:**\n`;
+    
+    // Add current score if available
+    if (currentScore !== null) {
+      const scoreEmoji = this.getScoreEmoji(currentScore);
+      message += `📊 **Current Score:** ${scoreEmoji} ${currentScore}/100\n\n`;
+    }
+    
+    message += `🔔 Alert Settings:**\n`;
     message += `• Price Alerts: ${preferences.priceAlerts ? '✅' : '❌'}\n`;
     message += `• Expiration Alerts: ${preferences.expirationAlerts ? '✅' : '❌'}\n`;
     message += `• Sale Alerts: ${preferences.saleAlerts ? '✅' : '❌'}\n`;
@@ -41,7 +49,7 @@ class SubscriptionFormatter {
       message += `${index + 1}. \`${domain}\`\n`;
     });
 
-    message += `\n�� **Alert Settings:**\n`;
+    message += `\n Alert Settings:**\n`;
     message += `• Price Alerts: ${preferences.priceAlerts ? '✅' : '❌'}\n`;
     message += `• Expiration Alerts: ${preferences.expirationAlerts ? '✅' : '❌'}\n`;
     message += `• Sale Alerts: ${preferences.saleAlerts ? '✅' : '❌'}\n`;
@@ -94,7 +102,7 @@ class SubscriptionFormatter {
     return `🔔 **Subscription Commands**\n\n` +
            `• \`/subscribe <domain>\` - Track a domain for events\n` +
            `• \`/unsubscribe <domain>\` - Stop tracking a domain\n` +
-           `• \`/my_subscriptions\` - View your active subscriptions\n` +
+           `• \`/mysubscriptions\` - View your active subscriptions\n` +
            `• \`/alerts\` - Configure alert preferences\n` +
            `• \`/help\` - Show all available commands\n\n` +
            `**Event Types:**\n` +
@@ -127,6 +135,18 @@ class SubscriptionFormatter {
    */
   static formatError(error) {
     return `❌ **Error:** ${error}\n\n_Please try again or contact support if the issue persists._`;
+  }
+
+  /**
+   * Get score emoji based on score value
+   * @param {number} score - Score value
+   * @returns {string} Emoji representation
+   */
+  static getScoreEmoji(score) {
+    if (score >= 90) return '🟢';
+    if (score >= 70) return '🟡';
+    if (score >= 50) return '🟠';
+    return '🔴';
   }
 }
 

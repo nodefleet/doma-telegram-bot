@@ -32,6 +32,36 @@ class DomaTelegramBot {
       this.bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
     });
 
+    // Unsubscribe command without domain (show help)
+    this.bot.onText(/^\/unsubscribe$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = msg.from.id;
+      
+      try {
+        const userSub = this.subscriptionService.getUserSubscriptions(userId);
+        
+        if (userSub.domains.size === 0) {
+          await this.bot.sendMessage(chatId, '📋 *Unsubscribe*\n\nYou are not currently subscribed to any domains.\n\nUse `/subscribe <domain>` to start tracking a domain.', { parse_mode: 'Markdown' });
+          return;
+        }
+
+        let message = '📋 *Your Subscriptions*\n\n';
+        const domains = Array.from(userSub.domains);
+        
+        domains.forEach(domain => {
+          message += `• \`${domain}\`\n`;
+        });
+        
+        message += `\nUse \`/unsubscribe <domain>\` to stop tracking a specific domain.\n`;
+        message += `Example: \`/unsubscribe example.com\``;
+
+        await this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      } catch (error) {
+        logger.error('Error processing unsubscribe command:', error);
+        await this.bot.sendMessage(chatId, SubscriptionFormatter.formatError('An unexpected error occurred. Please try again.'));
+      }
+    });
+
     // Help command
     this.bot.onText(/\/help/, (msg) => {
       const chatId = msg.chat.id;
@@ -85,7 +115,7 @@ class DomaTelegramBot {
       }
     });
 
-    // Subscribe command
+    // Subscribe command with domain
     this.bot.onText(/\/subscribe (.+)/, async (msg, match) => {
       const chatId = msg.chat.id;
       const userId = msg.from.id;
@@ -103,13 +133,87 @@ class DomaTelegramBot {
         
         if (result.success) {
           const userSub = this.subscriptionService.getUserSubscriptions(userId);
-          await this.bot.sendMessage(chatId, SubscriptionFormatter.formatSubscriptionSuccess(domain, userSub.preferences), { parse_mode: 'Markdown' });
+          
+          // Calculate current domain score for display
+          let currentScore = null;
+          try {
+            const scoreData = await this.scoringService.calculateDomainScore(domain);
+            currentScore = Math.round(scoreData.overallScore);
+          } catch (error) {
+            logger.warn(`Could not calculate score for ${domain} during subscription:`, error);
+            // Continue without score if calculation fails
+          }
+          
+          await this.bot.sendMessage(chatId, SubscriptionFormatter.formatSubscriptionSuccess(domain, userSub.preferences, currentScore), { parse_mode: 'Markdown' });
         } else {
           await this.bot.sendMessage(chatId, SubscriptionFormatter.formatError(result.message));
         }
 
       } catch (error) {
         logger.error('Error processing subscribe command:', error);
+        await this.bot.sendMessage(chatId, SubscriptionFormatter.formatError('An unexpected error occurred. Please try again.'));
+      }
+    });
+
+    // Subscribe command without domain (show help)
+    this.bot.onText(/^\/subscribe$/, async (msg) => {
+      const chatId = msg.chat.id;
+      await this.bot.sendMessage(chatId, SubscriptionFormatter.formatSubscriptionHelp(), { parse_mode: 'Markdown' });
+    });
+
+    // My subscriptions command
+    this.bot.onText(/^\/mysubscriptions$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = msg.from.id;
+      
+      try {
+        const userSub = this.subscriptionService.getUserSubscriptions(userId);
+        
+        if (userSub.domains.length === 0) {
+          const noSubscriptionsMessage = `📋 *Your Subscriptions*\n\n` +
+            `😔 *You don't have any subscriptions yet!*\n\n` +
+            `🚀 *Get started by tracking a domain:*\n` +
+            `• \`/subscribe example.com\` - Track a domain\n` +
+            `• \`/subscribe crypto.eth\` - Track a Web3 domain\n` +
+            `• \`/subscribe nft.xyz\` - Track an NFT domain\n\n` +
+            `💡 *What you'll get:*\n` +
+            `• 📊 Real-time score monitoring\n` +
+            `• 🔔 Price and activity alerts\n` +
+            `• 📈 Market trend updates\n` +
+            `• ⚠️ Expiration warnings\n\n` +
+            `_Start tracking your first domain to see it here!_`;
+          
+          await this.bot.sendMessage(chatId, noSubscriptionsMessage, { parse_mode: 'Markdown' });
+          return;
+        }
+
+        let message = '📋 *Your Subscriptions*\n\n';
+        const domains = Array.from(userSub.domains);
+        
+        for (const domain of domains) {
+          try {
+            const scoreData = await this.scoringService.calculateDomainScore(domain);
+            const currentScore = Math.round(scoreData.overallScore);
+            const scoreEmoji = currentScore >= 80 ? '🟢' : currentScore >= 60 ? '🟡' : '🔴';
+            message += `• \`${domain}\` ${scoreEmoji} ${currentScore}/100\n`;
+          } catch (error) {
+            message += `• \`${domain}\` ❓ Score unavailable\n`;
+          }
+        }
+        
+        message += `\n🔔 *Alert Settings:*\n`;
+        message += `• Score Threshold: ${userSub.preferences.scoreThreshold}/100\n`;
+        message += `• Price Alerts: ${userSub.preferences.priceAlerts ? '✅' : '❌'}\n`;
+        message += `• Sale Alerts: ${userSub.preferences.saleAlerts ? '✅' : '❌'}\n`;
+        message += `• Transfer Alerts: ${userSub.preferences.transferAlerts ? '✅' : '❌'}\n`;
+        message += `• Expiration Alerts: ${userSub.preferences.expirationAlerts ? '✅' : '❌'}\n`;
+        message += `• Report Interval: ${userSub.preferences.reportInterval}\n`;
+        message += `• Periodic Reports: ${userSub.preferences.periodicReports ? '✅' : '❌'}\n\n`;
+        message += `Use \`/unsubscribe <domain>\` to stop tracking a domain.`;
+
+        await this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      } catch (error) {
+        logger.error('Error processing mysubscriptions command:', error);
         await this.bot.sendMessage(chatId, SubscriptionFormatter.formatError('An unexpected error occurred. Please try again.'));
       }
     });
@@ -135,19 +239,6 @@ class DomaTelegramBot {
       }
     });
 
-    // My subscriptions command
-    this.bot.onText(/\/my_subscriptions/, async (msg) => {
-      const chatId = msg.chat.id;
-      const userId = msg.from.id;
-      
-      try {
-        const userSub = this.subscriptionService.getUserSubscriptions(userId);
-        await this.bot.sendMessage(chatId, SubscriptionFormatter.formatUserSubscriptions(userSub.domains, userSub.preferences), { parse_mode: 'Markdown' });
-      } catch (error) {
-        logger.error('Error processing my_subscriptions command:', error);
-        await this.bot.sendMessage(chatId, SubscriptionFormatter.formatError('An unexpected error occurred. Please try again.'));
-      }
-    });
 
     // Alerts command (preferences)
     this.bot.onText(/\/alerts/, (msg) => {

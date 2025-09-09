@@ -37,7 +37,7 @@ class SubscriptionService {
             expirationAlerts: true,
             saleAlerts: true,
             transferAlerts: true,
-            scoreThreshold: 50,
+            scoreThreshold: 80, // Default to 80 - alert when score drops below this
             reportInterval: '30min', // Default to 30 minutes
             periodicReports: true
           }
@@ -120,7 +120,18 @@ class SubscriptionService {
    */
   getUserSubscriptions(userId) {
     if (!this.subscriptions.has(userId)) {
-      return { domains: [], preferences: {} };
+      return { 
+        domains: [], 
+        preferences: {
+          priceAlerts: false,
+          expirationAlerts: false,
+          saleAlerts: false,
+          transferAlerts: false,
+          scoreThreshold: 80,
+          reportInterval: '30min',
+          periodicReports: false
+        }
+      };
     }
 
     const userSub = this.subscriptions.get(userId);

@@ -9,14 +9,21 @@ class ResponseFormatter {
    * @returns {string} Formatted response
    */
   static formatDomainScore(scoreData) {
-    const { domain, overallScore, scores, breakdown } = scoreData;
+    const { domain, overallScore, scores, seoBreakdown, blockchainBreakdown } = scoreData;
     
     let response = `🎯 *Domain Score Report*\n\n`;
     response += `🌐 *Domain:* \`${domain}\`\n`;
     response += `⭐ *Overall Score:* ${this.getScoreEmoji(overallScore)} *${overallScore}/100*\n\n`;
     
-    response += `📊 *Score Breakdown:*\n`;
-    breakdown.forEach((item, index) => {
+    // SEO Scores Section (75% weight)
+    response += `📈 *SEO Scores (75% weight):*\n`;
+    seoBreakdown.forEach((item) => {
+      const emoji = this.getTraitEmoji(item.trait);
+      response += `${emoji} *${this.formatTraitName(item.trait)}:* ${item.score}/100 (${item.weight}% weight)\n`;
+    });
+    
+    response += `\n⛓️ *Blockchain Scores (25% weight):*\n`;
+    blockchainBreakdown.forEach((item) => {
       const emoji = this.getTraitEmoji(item.trait);
       response += `${emoji} *${this.formatTraitName(item.trait)}:* ${item.score}/100 (${item.weight}% weight)\n`;
     });
@@ -49,18 +56,18 @@ class ResponseFormatter {
            `• /score <domain> - Get domain score\n` +
            `• /subscribe <domain> - Track domain for events\n` +
            `• /unsubscribe <domain> - Stop tracking domain\n` +
-           `• /my_subscriptions - View your subscriptions\n` +
+           `• /mysubscriptions - View your subscriptions\n` +
            `• /alerts - Configure alert preferences\n` +
-           `• /set_interval <time> - Set report frequency\n` +
+           `• /setinterval <time> - Set report frequency\n` +
            `• /reports <on|off> - Toggle periodic reports\n` +
-           `• /report_help - Report interval options\n` +
+           `• /reporthelp - Report interval options\n` +
            `• /help - Show this help message\n` +
            `• /about - About the bot\n\n` +
            `*Examples:*\n` +
            `• /score example.com\n` +
            `• /score crypto.eth\n` +
            `• /score nft.xyz\n` +
-           `• /set_interval 30min\n` +
+           `• /setinterval 30min\n` +
            `• /reports on\n\n` +
            `*Features:*\n` +
            `• Comprehensive domain scoring\n` +
