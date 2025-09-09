@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const DomaService = require('./DomaService');
+const DomaService = require('./domaService');
 
 class SubscriptionService {
   constructor() {
